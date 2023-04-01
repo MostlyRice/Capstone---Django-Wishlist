@@ -7,4 +7,4 @@ class Place(models.Model):
 
     def __str__(self):
 
-        return f'{self.name}, visited? {self.visited} on {self.date_visited}'
+        return f'{self.name}, visited? {self.visited}'
