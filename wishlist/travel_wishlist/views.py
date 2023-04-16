@@ -1,88 +1,86 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from .models import Place
-from .forms import NewPlaceForm
-from .forms import TripReviewForm
+from .forms import NewPlaceForm, TripReviewForm
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden # helps with security, if the actual user is making the changes etc
 from django.contrib import messages
 
 @login_required
-def place_list(request): 
-
+def place_list(request):
+    
     if request.method == 'POST':
-        # Create new place
-        form = NewPlaceForm(request.POST) # Create form from data in request
-        place = form.save(commit=False) # Create new place object from data entered in form
+        # create new place
+        form = NewPlaceForm(request.POST) # creating the form from the data on the page
+        place = form.save(commit=False) # create model object from the form
         place.user = request.user
-        if form.is_valid(): # DB constraint validation
-            place.save() # Save model to DB
-            return redirect('place_list') # Refresh home page to display newly added places
+        if form.is_valid(): # validation against DB constraints
+            place.save() # saves place to db
+            return redirect('place_list') # reloads the home page
+        
+    places = Place.objects.filter(user=request.user).filter(visited=False).order_by('name')
+    new_place_form = NewPlaceForm() # used to create HTML
+    return render(request, 'travel_wishlist/wishlist.html', {'places': places, 'new_place_form': new_place_form})
 
-    places = Place.objects.filter(user=request.user).filter(visited=False).order_by('name') # Retrieve all objects from database where visited is False, order by name
-    new_place_form = NewPlaceForm() # Empty form used to create HTML
-    # Combine the template with dictionary containing places list and the place form to create a web page containing them together
-    return render(request, 'travel_wishlist/wishlist.html', {'places': places, 'new_place_form': new_place_form}) 
-
-@login_required
-def about(request):
-    # About page containing author and description
-    author = 'Natalie'
-    about = 'A website to create a list of places to visit.'
-    return render(request, 'travel_wishlist/about.html', {'author': author, 'about': about})
 
 @login_required
 def places_visited(request):
-    # Page containing list of places that have already been visited
-    visited = Place.objects.filter(visited=True) # Get all Place objects that have been checked as visited
+    visited = Place.objects.filter(user=request.user).filter(visited=True)
     return render(request, 'travel_wishlist/visited.html', {'visited': visited})
+
 
 @login_required
 def place_was_visited(request, place_pk):
-    # Allows user to change the value of a place object's 'visited' attribute to True
     if request.method == 'POST':
-        place = get_object_or_404(Place, pk=place_pk) # Get the object that corresponds to the requested primary key - send 404 response if pk doesn't exist
+        #place = Place.objects.get(pk=place_pk)
+        place = get_object_or_404(Place, pk=place_pk)
         if place.user == request.user:
-            place.visited = True # Change the object's visited value to True
+            place.visited = True
             place.save()
         else:
             return HttpResponseForbidden()
-
-    return redirect('place_list') # Reload to update list of places on home page
+        
+    return redirect('place_list')
 
 @login_required
 def place_details(request, place_pk):
-    # Page containing details of a specific page
     place = get_object_or_404(Place, pk=place_pk)
-
-    # Only display place if it belongs to logged in user
+    #return render(request, 'travel_wishlist/place_detail.html', {'place': place})
+    # Does this place belong to the current user?
     if place.user != request.user:
-        return HttpResponseForbidden
+        return HttpResponseForbidden()
     
-    # If POST request, capture data that was entered into the form and update the given place
-    # Save the form if it's valid.
+    
+    # is this a GET request (show data + form) or a POST request (update Place object)?
+    
+    # if POST request, validate form data and update.
     if request.method == 'POST':
         form = TripReviewForm(request.POST, request.FILES, instance=place)
         if form.is_valid():
             form.save()
             messages.info(request, 'Trip information updated!')
         else:
-            messages.error(request, form.errors) # TODO - Refine this 
+            messages.error(request, form.errors)  # temporary, refine later
         return redirect('place_details', place_pk=place_pk)
-    else:  # If GET request, check if place is visited. 
-        if place.visited:  # If visited, display form to user
+    
+    else:           
+        # if GET request, show Place info and form
+        # If place is visited, show form; if place is not visited, no form.
+        if place.visited:
             review_form = TripReviewForm(instance=place)
-            return render(request, 'travel_wishlist/place_detail.html', {'place': place, 'review_form': review_form})
-        else:  # If not visited, do not display form
-            return render(request, 'travel_wishlist/place_detail.html', {'place': place})
-        
-
-
+            return render(request, 'travel_wishlist/place_detail.html', {'place' : place, 'review_form' : review_form})
+        else:
+            return render(request, 'travel_wishlist/place_detail.html', {'place' : place})
 @login_required
 def delete_place(request, place_pk):
-    # Delete specific place
     place = get_object_or_404(Place, pk=place_pk)
-    if place.user == request.user: # Ensure user owns the place selected
-        place.delete() 
-        return redirect('place_list') # Return to place list page
+    if place.user == request.user:
+        place.delete()
+        return redirect('place_list')
     else:
-        HttpResponseForbidden() # Return 403 response if user doesn't own place
+        return HttpResponseForbidden()
+    
+
+def about(request):
+    author = 'Minleg'
+    about = 'A website to create a list of places to visit'
+    return render(request, 'travel_wishlist/about.html', {'author': author, 'about': about})
